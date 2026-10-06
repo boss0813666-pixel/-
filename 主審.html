@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>主審挑戰｜好球帶判決</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;overflow:hidden;background:#183b2a;color:#fff9e9;font:15px system-ui,"Noto Sans TC",sans-serif}
+#world{position:fixed;inset:0}
+#world canvas{display:block;width:100%;height:100%}
+header{position:fixed;z-index:2;top:0;left:0;right:0;padding:13px 20px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(#081a18c9,transparent)}
+.brand{font-weight:800;letter-spacing:.07em;text-shadow:0 2px 6px #000}
+.brand small{display:block;font-size:10px;color:#c9ddd0;letter-spacing:.16em}
+.pill{border:1px solid #f4d18480;border-radius:99px;padding:6px 11px;background:#102621bb;color:#f4d184;font-size:11px}
+.scoreboard{position:fixed;z-index:2;left:50%;top:57px;transform:translateX(-50%);display:flex;gap:6px;width:min(600px,94vw);justify-content:center}
+.score{background:#0b211fc4;border:1px solid #ffffff38;border-radius:8px;padding:6px 12px;min-width:105px;text-align:center;backdrop-filter:blur(5px)}
+.score span{display:block;color:#c6d6cc;font-size:10px}.score b{display:block;font-size:17px;font-variant-numeric:tabular-nums}
+#status{position:fixed;z-index:2;top:111px;left:50%;transform:translateX(-50%);min-width:225px;max-width:94vw;text-align:center;padding:7px 12px;border-radius:8px;background:#0b211fc9;border:1px solid #ffffff35;text-shadow:0 1px 4px #000;font-size:13px}
+#status.good{color:#8cf0b4}#status.bad{color:#ff9289}
+#detail{display:block;color:#fff9e9;font-size:11px;margin-top:2px}
+.bottom{position:fixed;z-index:2;bottom:0;left:0;right:0;padding:22px 14px max(14px,env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;gap:8px;background:linear-gradient(transparent,#081a18e8 28%)}
+#timerBox{width:min(340px,84vw);height:6px;background:#ffffff40;border-radius:99px;overflow:hidden}
+#timer{height:100%;background:#f4d184;transform-origin:left}
+.controls{display:flex;gap:10px}
+button{font:800 15px system-ui,"Noto Sans TC",sans-serif;cursor:pointer;border:0;border-radius:9px;padding:12px 20px;min-width:140px;box-shadow:0 4px 12px #00120d70}
+button:disabled{opacity:.42;cursor:not-allowed}
+#strike{background:#f4d184;color:#33270e}#ballCall{background:#e1eee4;color:#17342b}
+#launch{background:#70dda7;color:#0c2a1e;min-width:218px}
+.hint{font-size:10px;color:#d5e3d9;text-shadow:0 1px 4px #000}
+kbd{border:1px solid #ffffff66;border-radius:4px;padding:1px 5px;background:#ffffff1a}
+.overlay{position:fixed;inset:0;z-index:5;background:#071713aa;backdrop-filter:blur(5px);display:grid;place-items:center;padding:18px}
+.overlay.hidden{display:none}
+.dialog{width:min(450px,94vw);padding:23px;text-align:center;border-radius:15px;border:1px solid #ffffff45;background:linear-gradient(145deg,#1c4b39,#102b27);box-shadow:0 20px 70px #0009}
+.dialog h1{font-size:clamp(24px,6vw,34px);margin:0 0 8px}
+.dialog p{line-height:1.65;color:#d5e4da}
+.summary{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:17px 0}
+.summary div{padding:9px;border-radius:8px;background:#ffffff0d;border:1px solid #ffffff26}
+.summary span{display:block;font-size:10px;color:#c7d9cd}.summary b{font-size:19px;color:#f4d184}
+@media(max-width:520px){.score{min-width:calc(50% - 5px);padding:5px}.score b{font-size:15px}.scoreboard{flex-wrap:wrap;top:54px}#status{top:111px}.controls{gap:7px}button{min-width:calc(50vw - 21px);padding:12px 7px;font-size:13px}}
+</style>
+</head>
+<body>
+<div id="world"></div>
+<header><div class="brand">主審挑戰<small>HOME PLATE UMPIRE</small></div><div class="pill">⚾ 主審視角</div></header>
+<div class="scoreboard">
+  <div class="score"><span>投球數</span><b id="count">0 / 10</b></div>
+  <div class="score"><span>答對</span><b id="right">0</b></div>
+  <div class="score"><span>誤判</span><b id="wrong">0</b></div>
+  <div class="score"><span>平均反應時間</span><b id="avg">0.00 秒</b></div>
+</div>
+<div id="status">準備就緒<span id="detail">開始比賽後，先觀察好球帶</span></div>
+<div class="bottom">
+  <div id="timerBox"><div id="timer"></div></div>
+  <div class="controls">
+    <button id="strike" disabled>⚾ 好球 <kbd>Z</kbd></button>
+    <button id="ballCall" disabled>✕ 壞球 <kbd>X</kbd></button>
+  </div>
+  <button id="launch">開始投球</button>
+  <div class="hint">投球飛行少於 0.2 秒 · 通過本壘後 2 秒內判決</div>
+</div>
+
+<div class="overlay" id="welcome">
+  <section class="dialog">
+    <h1>⚾ 好球帶判決</h1>
+    <p>你是站在捕手後方的主審。投手會從遠方投出直球或滑球，請在球通過本壘後判斷好球或壞球。</p>
+    <p>一回合 10 球。按下「開始投球」後，九宮格會消失，請憑觀察做出判決。</p>
+    <button id="begin" style="background:#70dda7;color:#0c2a1e">開始比賽</button>
+  </section>
+</div>
+<div class="overlay hidden" id="finish"><section class="dialog" id="final"></section></div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}
+</script>
+<script type="module">
+import * as THREE from "three";
+
+const $=id=>document.getElementById(id);
+const scene=new THREE.Scene();
+scene.background=new THREE.Color("#9fc3ce");
+scene.fog=new THREE.Fog("#9fc3ce",31,78);
+
+const camera=new THREE.PerspectiveCamera(43,innerWidth/innerHeight,.1,100);
+camera.position.set(0,3.25,15.4);
+camera.lookAt(0,1.45,-1.2);
+
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.1;
+$("world").appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xe9f6ff,0x614a32,2));
+const sun=new THREE.DirectionalLight(0xffe8be,3);
+sun.position.set(-9,18,10);sun.castShadow=true;
+sun.shadow.mapSize.set(1536,1536);
+sun.shadow.camera.left=-24;sun.shadow.camera.right=24;
+sun.shadow.camera.top=25;sun.shadow.camera.bottom=-20;
+scene.add(sun);
+
+const material=(color,roughness=.85)=>new THREE.MeshStandardMaterial({color,roughness});
+const grass=material("#367d49"),dirt=material("#a96f43"),moundMat=material("#b78252");
+const cream=material("#f5f0df"),navy=material("#233d4a"),padMat=material("#506875");
+const skin=material("#bd8768"),capMat=material("#244255"),red=material("#b5483d");
+function add(geo,mat,x=0,y=0,z=0,parent=scene){
+  const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;
+}
+function box(w,h,d,mat,x,y,z,parent=scene){return add(new THREE.BoxGeometry(w,h,d),mat,x,y,z,parent)}
+function ballMesh(r,mat,x,y,z,parent=scene){return add(new THREE.SphereGeometry(r,20,14),mat,x,y,z,parent)}
+function limb(a,b,r1,r2,mat,parent){
+  const va=new THREE.Vector3(...a),vb=new THREE.Vector3(...b);
+  const dir=vb.clone().sub(va),len=dir.length();
+  const m=add(new THREE.CylinderGeometry(r2,r1,len,12),mat,0,0,0,parent);
+  m.position.copy(va.add(vb).multiplyScalar(.5));
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.normalize());
+  return m;
+}
+
+// 草地和內野紅土，紅土菱形由本壘延伸至投手丘附近。
+const ground=add(new THREE.PlaneGeometry(100,100),grass,0,-.14,-12);ground.rotation.x=-Math.PI/2;
+const shape=new THREE.Shape();
+shape.moveTo(0,-7.2);shape.lineTo(6,0);shape.lineTo(0,11);shape.lineTo(-6,0);shape.closePath();
+const infieldGeo=new THREE.ShapeGeometry(shape);infieldGeo.rotateX(-Math.PI/2);
+add(infieldGeo,dirt,0,.01,0);
+
+// 本壘、壘包、跑壘線。
+const plateShape=new THREE.Shape();
+plateShape.moveTo(-.43,.38);plateShape.lineTo(.43,.38);plateShape.lineTo(.43,-.06);
+plateShape.lineTo(0,-.42);plateShape.lineTo(-.43,-.06);plateShape.closePath();
+const plateGeo=new THREE.ShapeGeometry(plateShape);plateGeo.rotateX(-Math.PI/2);
+add(plateGeo,cream,0,.025,7.1);
+for(const [x,z] of [[6,0],[0,-11],[-6,0]]){
+  const b=box(.42,.07,.42,cream,x,.055,z);b.rotation.y=Math.PI/4;
+}
+for(const [x,z,angle] of [[2.8,3.6,-.63],[-2.8,3.6,.63],[2.8,-5,-.63],[-2.8,-5,.63]]){
+  const l=box(.04,.025,9,cream,x,.035,z);l.rotation.y=angle;
+}
+
+// 投手丘與投手板，在遠方。
+const mound=add(new THREE.CylinderGeometry(2.15,2.45,.32,40),moundMat,0,.08,-12.8);
+mound.scale.z=.78;
+box(.8,.055,.22,cream,0,.27,-12.7);
+
+// 簡化的看台、座椅和外野圍欄。
+const stand=material("#48686a"),seat1=material("#ba5142"),seat2=material("#ddb85f");
+for(let row=0;row<5;row++){
+  const z=-25-row*.32,y=2+row*.44;
+  box(40,.4,.35,stand,0,y,z);
+  for(let i=0;i<27;i++)box(.53,.26,.32,(i+row)%3?seat2:seat1,-18.2+i*1.4,y+.31,z);
+}
+box(46,1,.28,material("#244d40"),0,.55,-21);
+box(46,.1,.1,cream,0,1.1,-20.8);
+
+// 捕手蹲在本壘前方，主審從他的背後看向投手。
+const catcher=new THREE.Group();catcher.position.set(.12,0,7.85);scene.add(catcher);
+ballMesh(.48,navy,0,1.03,0,catcher);
+ballMesh(.38,padMat,0,1.03,.34,catcher);
+ballMesh(.31,capMat,0,1.61,.05,catcher);
+const helmetRim=add(new THREE.TorusGeometry(.31,.055,8,24),capMat,0,1.56,.29,catcher);
+helmetRim.rotation.x=Math.PI/2;
+box(.06,.4,.1,capMat,-.3,1.39,.34,catcher);
+box(.06,.4,.1,capMat,.3,1.39,.34,catcher);
+box(.65,.055,.1,capMat,0,1.21,.35,catcher);
+limb([-.32,.82,.1],[-.72,.22,.52],.16,.2,padMat,catcher);
+limb([.32,.82,.1],[.72,.22,.52],.16,.2,padMat,catcher);
+ballMesh(.18,capMat,-.72,.15,.56,catcher);
+ballMesh(.18,capMat,.72,.15,.56,catcher);
+limb([-.4,1.08,.06],[-.85,.8,.52],.1,.13,navy,catcher);
+limb([.4,1.08,.06],[.8,.8,.55],.1,.13,navy,catcher);
+ballMesh(.18,material("#805b38"),.83,.75,.68,catcher);
+
+// 投手：小比例、遠距離、面向本壘及攝影機。
+const pitcher=new THREE.Group();pitcher.position.set(0,0,-12.7);scene.add(pitcher);
+ballMesh(.43,cream,0,1.39,0,pitcher);
+ballMesh(.22,skin,0,2.04,.02,pitcher);
+ballMesh(.24,capMat,0,2.22,0,pitcher);
+box(.36,.055,.21,capMat,0,2.13,.14,pitcher);
+limb([-.18,1.04,0],[-.34,.2,.04],.16,.12,material("#d4d0c5"),pitcher);
+limb([.18,1.04,0],[.34,.2,.04],.16,.12,material("#d4d0c5"),pitcher);
+ballMesh(.17,navy,-.35,.14,.12,pitcher);
+ballMesh(.17,navy,.35,.14,.12,pitcher);
+const throwArm=limb([.32,1.7,0],[.52,1.34,.2],.1,.09,skin,pitcher);
+limb([-.32,1.7,0],[-.52,1.42,.16],.1,.09,skin,pitcher);
+
+// 3D 好球帶：只在投球前和結果公布時顯示。
+const zoneGroup=new THREE.Group();scene.add(zoneGroup);
+const zoneZ=6.48,zoneW=1.62,zoneH=1.95,zoneBottom=.86;
+const zoneLine=new THREE.LineBasicMaterial({color:0xfff0c5,transparent:true,opacity:.9,depthTest:false});
+const fillMat=new THREE.MeshBasicMaterial({color:0xf5d88c,transparent:true,opacity:.065,side:THREE.DoubleSide,depthTest:false,depthWrite:false});
+const corners=[[-zoneW/2,zoneBottom,zoneZ],[zoneW/2,zoneBottom,zoneZ],
+  [zoneW/2,zoneBottom+zoneH,zoneZ],[-zoneW/2,zoneBottom+zoneH,zoneZ]];
+const fg=new THREE.BufferGeometry();
+fg.setAttribute("position",new THREE.Float32BufferAttribute(corners.flat(),3));
+fg.setIndex([0,1,2,0,2,3]);fg.computeVertexNormals();
+const face=add(fg,fillMat,0,0,0,zoneGroup);face.renderOrder=10;
+function zoneLine3(points){
+  const g=new THREE.BufferGeometry().setFromPoints(points.map(p=>new THREE.Vector3(...p)));
+  const line=new THREE.Line(g,zoneLine);line.renderOrder=11;zoneGroup.add(line);
+}
+zoneLine3([...corners,corners[0]]);
+for(let i=1;i<3;i++){
+  const x=-zoneW/2+zoneW*i/3;
+  zoneLine3([[x,zoneBottom,zoneZ],[x,zoneBottom+zoneH,zoneZ]]);
+  const y=zoneBottom+zoneH*i/3;
+  zoneLine3([[-zoneW/2,y,zoneZ],[zoneW/2,y,zoneZ]]);
+}
+// 九宮格小數字貼在空間中的對應位置。
+for(let r=0;r<3;r++)for(let c=0;c<3;c++){
+  const can=document.createElement("canvas");can.width=96;can.height=96;
+  const ctx=can.getContext("2d");ctx.fillStyle="rgba(255,248,225,.72)";
+  ctx.font="bold 38px sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";
+  ctx.fillText(String(r*3+c+1),48,48);
+  const tex=new THREE.CanvasTexture(can);tex.colorSpace=THREE.SRGBColorSpace;
+  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
+  sprite.position.set(-zoneW/2+zoneW*(c+.5)/3,zoneBottom+zoneH*(2.5-r)/3,zoneZ-.025);
+  sprite.scale.set(.16,.16,1);sprite.renderOrder=12;zoneGroup.add(sprite);
+}
+
+// 棒球與判決落點記號。
+const baseball=ballMesh(.115,new THREE.MeshStandardMaterial({color:"#fffaf0",roughness:.5}),0,1,-12);
+baseball.visible=false;
+const seamMat=new THREE.MeshBasicMaterial({color:"#c84942"});
+for(const sign of [-1,1]){
+  const curve=new THREE.EllipseCurve(0,0,.075,.09,.3,5.95,false);
+  const points=curve.getPoints(24).map(p=>new THREE.Vector3(p.x,p.y,sign*.045));
+  baseball.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),seamMat));
+}
+const marker=add(new THREE.SphereGeometry(.115,18,14),
+  new THREE.MeshBasicMaterial({color:"#ffd35d",depthTest:false}),0,1,zoneZ-.06);
+marker.visible=false;marker.renderOrder=14;
+const markerRing=add(new THREE.TorusGeometry(.2,.022,8,28),
+  new THREE.MeshBasicMaterial({color:"#fff1bc",depthTest:false}),0,1,zoneZ-.05);
+markerRing.visible=false;markerRing.renderOrder=14;
+
+// 少量看台光點，補出球場背景層次。
+const dots=[];
+for(let i=0;i<260;i++)dots.push((Math.random()-.5)*38,2+Math.random()*2.5,-24-Math.random()*1.5);
+const crowdGeo=new THREE.BufferGeometry();crowdGeo.setAttribute("position",new THREE.Float32BufferAttribute(dots,3));
+scene.add(new THREE.Points(crowdGeo,new THREE.PointsMaterial({color:"#fff0cf",size:.045,transparent:true,opacity:.78})));
+
+let count=0,right=0,wrong=0,times=[],phase="welcome",pitch=null;
+let flightStart=0,flightMs=178,deadline=0,nextTimer=0;
+const maxPitches=10;
+const rand=(a,b)=>a+Math.random()*(b-a);
+
+function status(main,detail="",kind=""){
+  $("status").className=kind;$("status").innerHTML=`${main}<span id="detail">${detail}</span>`;
+}
+function updateScore(){
+  $("count").textContent=`${count} / ${maxPitches}`;
+  $("right").textContent=right;$("wrong").textContent=wrong;
+  const average=times.length?times.reduce((a,b)=>a+b,0)/times.length/1000:0;
+  $("avg").textContent=`${average.toFixed(2)} 秒`;
+}
+function zoneCell(x,y){
+  const col=Math.max(0,Math.min(2,Math.floor((x+zoneW/2)/zoneW*3)));
+  const row=Math.max(0,Math.min(2,2-Math.floor((y-zoneBottom)/zoneH*3)));
+  return row*3+col+1;
+}
+function describe(x,y){
+  if(x< -zoneW/2)return "好球帶左側";
+  if(x> zoneW/2)return "好球帶右側";
+  if(y> zoneBottom+zoneH)return "好球帶上方";
+  if(y< zoneBottom)return "好球帶下方";
+  return `好球帶第 ${zoneCell(x,y)} 格`;
+}
+function randomTarget(){
+  const strike=Math.random()<.56;let x,y;
+  if(strike){
+    x=rand(-zoneW*.46,zoneW*.46);
+    y=rand(zoneBottom+.05,zoneBottom+zoneH-.05);
+  }else{
+    const side=Math.floor(Math.random()*4);
+    if(side===0){x=rand(-1.3,-.88);y=rand(.55,3.2)}
+    if(side===1){x=rand(.88,1.3);y=rand(.55,3.2)}
+    if(side===2){x=rand(-1.15,1.15);y=rand(3.02,3.5)}
+    if(side===3){x=rand(-1.15,1.15);y=rand(.45,.72)}
+  }
+  return {x,y,strike};
+}
+function disableButtons(value){$("strike").disabled=value;$("ballCall").disabled=value}
+
+function throwPitch(){
+  if(count>=maxPitches){finish();return}
+  phase="flight";disableButtons(true);$("launch").disabled=true;
+  $("launch").style.display="none";
+  zoneGroup.visible=false; // 投球開始時立刻隱藏九宮格。
+  marker.visible=false;markerRing.visible=false;
+
+  const slider=Math.random()<.36;
+  pitch={target:randomTarget(),slider,
+    type:slider?"滑球":"直球",
+    speed:slider?Math.round(rand(84,91)):Math.round(rand(94,103))};
+
+  const start=new THREE.Vector3(rand(-.08,.08),1.82,-12.45);
+  const end=new THREE.Vector3(pitch.target.x,pitch.target.y,zoneZ);
+  const bend=slider?(Math.random()<.5?-1:1)*rand(.15,.29):0;
+  const control=new THREE.Vector3((start.x+end.x)/2+bend,2.15,-3.9);
+  pitch.start=start;pitch.end=end;pitch.control=control;
+  flightStart=performance.now();baseball.position.copy(start);
+  baseball.scale.setScalar(.35);baseball.visible=true;
+  throwArm.rotation.x=-.4;
+  $("timer").style.transform="scaleX(1)";
+  status("投球中！","直球／滑球 · 盯住來球");
+}
+
+function updateFlight(now){
+  if(phase==="flight"&&pitch){
+    const t=Math.min(1,(now-flightStart)/flightMs),u=1-t,p=pitch;
+    baseball.position.set(
+      u*u*p.start.x+2*u*t*p.control.x+t*t*p.end.x,
+      u*u*p.start.y+2*u*t*p.control.y+t*t*p.end.y,
+      u*u*p.start.z+2*u*t*p.control.z+t*t*p.end.z
+    );
+    // 物件由小變大，加強遠近速度感；滑球只有最後一小段有橫移。
+    baseball.scale.setScalar(.35+1.45*t);
+    baseball.rotation.z=p.slider?Math.sin(t*Math.PI)*.28:0;
+    if(t>=1)atPlate(now);
+  }else if(phase==="decision"){
+    const left=Math.max(0,deadline-now);
+    $("timer").style.transform=`scaleX(${left/2000})`;
+    if(left<=0)judge(null,true);
+  }
+}
+
+function atPlate(now){
+  phase="decision";deadline=now+2000;
+  disableButtons(false);
+  // 球已通過才開始計時；九宮格仍保持隱藏。
+  status("判決！","球已通過本壘 · 2 秒內按好球或壞球");
+}
+function judge(call,timedOut=false){
+  if(phase!=="decision")return;
+  phase="result";disableButtons(true);
+  const ms=timedOut?2000:Math.min(2000,performance.now()-(deadline-2000));
+  times.push(ms);count++;
+  const correct=!timedOut&&call===pitch.target.strike;
+  if(correct)right++;else wrong++;
+  updateScore();
+
+  // 結果揭曉後才重新顯示好球帶及落點。
+  zoneGroup.visible=true;
+  marker.position.set(pitch.target.x,pitch.target.y,zoneZ-.065);
+  markerRing.position.set(pitch.target.x,pitch.target.y,zoneZ-.055);
+  marker.visible=true;markerRing.visible=true;
+  const actual=pitch.target.strike?"好球":"壞球";
+  const mine=call===null?"未判決":call?"好球":"壞球";
+  const headline=timedOut?"超時！判決錯誤":correct?"✓ 判定正確！":"✕ 判定錯誤！";
+  status(headline,
+    `你的判定：${mine} · 實際：${actual} · 位置：${describe(pitch.target.x,pitch.target.y)} · 反應：${(ms/1000).toFixed(2)} 秒`,
+    correct?"good":"bad");
+  $("detail").textContent+=` · ${pitch.type} ${pitch.speed} mph`;
+
+  if(count>=maxPitches)nextTimer=setTimeout(finish,1350);
+  else nextTimer=setTimeout(throwPitch,1350);
+}
+function finish(){
+  phase="finish";clearTimeout(nextTimer);disableButtons(true);
+  $("launch").style.display="none";
+  const accuracy=Math.round(right/maxPitches*100);
+  const errorRate=Math.round(wrong/maxPitches*100);
+  const average=times.reduce((a,b)=>a+b,0)/times.length/1000;
+  $("final").innerHTML=`
+    <h1>本回合結束！</h1>
+    <div class="summary">
+      <div><span>投球數</span><b>10</b></div>
+      <div><span>答對</span><b>${right}</b></div>
+      <div><span>誤判</span><b>${wrong}</b></div>
+      <div><span>正確率</span><b>${accuracy}%</b></div>
+      <div><span>誤判率</span><b>${errorRate}%</b></div>
+      <div><span>平均反應時間</span><b>${average.toFixed(2)} 秒</b></div>
+    </div>
+    <button id="again" style="background:#70dda7;color:#0c2a1e">再玩一次</button>`;
+  $("finish").classList.remove("hidden");
+  $("again").onclick=reset;
+}
+function reset(){
+  clearTimeout(nextTimer);count=0;right=0;wrong=0;times=[];pitch=null;phase="ready";
+  $("finish").classList.add("hidden");$("launch").style.display="";
+  $("launch").disabled=false;$("launch").textContent="開始投球";
+  baseball.visible=false;marker.visible=false;markerRing.visible=false;
+  zoneGroup.visible=true;disableButtons(true);$("timer").style.transform="scaleX(1)";
+  updateScore();status("準備就緒","九宮格僅在投球前與公布結果時出現");
+}
+
+$("begin").onclick=()=>{
+  $("welcome").classList.add("hidden");phase="ready";
+  status("準備就緒","先觀察好球帶，再開始投球");
+};
+$("launch").onclick=throwPitch;
+$("strike").onclick=()=>judge(true);
+$("ballCall").onclick=()=>judge(false);
+$("begin").addEventListener("click",()=>{zoneGroup.visible=true});
+$("strike").disabled=true;$("ballCall").disabled=true;
+addEventListener("keydown",e=>{
+  if(e.repeat)return;
+  if(e.key.toLowerCase()==="z")judge(true);
+  if(e.key.toLowerCase()==="x")judge(false);
+});
+addEventListener("resize",()=>{
+  camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+function animate(now){
+  requestAnimationFrame(animate);
+  updateFlight(now);
+  catcher.rotation.y=Math.sin(now*.0011)*.008;
+  pitcher.rotation.y=Math.sin(now*.0013)*.012;
+  if(phase==="flight")throwArm.rotation.x=Math.sin((now-flightStart)/flightMs*Math.PI)*-.6;
+  renderer.render(scene,camera);
+}
+updateScore();requestAnimationFrame(animate);
+</script>
+</body>
+</html>
